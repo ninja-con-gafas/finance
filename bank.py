@@ -258,7 +258,8 @@ def enrich_merged_statement(bank_statements: Dict[str, DataFrame]) -> Dict[str, 
             opening_transaction["debit"], opening_transaction["credit"] = opening_transaction["balance"], 0.0
 
         statement = (concat([DataFrame([opening_transaction]), statement], ignore_index=True)
-                     .assign(debit=lambda x: (- x["debit"]))
+                     .assign(debit=lambda x: (- x["debit"]),
+                             date=lambda x: to_datetime(x['date'], format='mixed').dt.strftime('%Y-%m-%d'))
                      .drop(columns=["balance"])
                      .rename(columns={"account holder": "account_holder"})
                      .reindex(columns=["date", "description", "credit", "debit", "bank", "account_holder"]))
@@ -429,6 +430,27 @@ def get_financial_year(date: Timestamp) -> str:
     end_year = start_year + 1
     return f"{start_year}-{end_year}"
 
+def get_consolidated_statement(directory: str, account_holders: Dict[str, str]) -> DataFrame:
+
+    """
+    Retrieves and consolidates bank account statements from the specified directory. The function loads all statement
+    files from the directory, enriches the statements and adds account holder information, merges them and consolidates
+    the data into a unified pandas DataFrame.
+
+    args:
+        directory (str): The path to the directory containing the bank account statement files.
+        account_holders (Dict[str, str]): A dictionary mapping account numbers to account holder names for enrichment.
+
+    returns:
+        DataFrame: A consolidated pandas DataFrame containing all the bank account statements.
+
+    raises:
+        None
+    """
+
+    return consolidate_statements(enrich_merged_statement(merge_statements(enrich_statements(load_all_files(directory),
+                                                                                             account_holders))))
+
 def load_all_files(directory: str) -> Dict[str, Optional[Union[Dict[str, DataFrame], DataFrame]]]:
 
     """
@@ -448,6 +470,26 @@ def load_all_files(directory: str) -> Dict[str, Optional[Union[Dict[str, DataFra
         None
     """
 
+    file_names: List[str] = [file_name 
+                             for file_name in os.listdir(directory) 
+                             if os.path.isfile(os.path.join(directory, file_name)) 
+                             and 
+                             re.match(r"([A-Z]+)_([A-Z]+)_(\d{4})_(\d{4})\.(\w+)", file_name)]
+    
+    if file_names:
+        for file_name in file_names:
+           print(f"Processing file: {file_name}")
+           file_path = os.path.join(directory, file_name)
+           (initials_of_account_holder, initials_of_bank, 
+            financial_year_start, financial_year_end, extension) = get_file_info(file_name)
+           
+           if initials_of_bank == "BOM":
+               save_segregated_statements(statements=segregate_statement
+                                          (enrich_bom_statement(read_as_html_file(file_path=file_path, min_columns=5))),
+                                          initials_of_account_holder=initials_of_account_holder,
+                                          initials_of_bank=initials_of_bank,
+                                          directory=directory)
+
     statements: Dict[str, Optional[Union[Dict[str, DataFrame], DataFrame]]] = {}
     
     file_names: List[str] = [file_name 
@@ -458,8 +500,8 @@ def load_all_files(directory: str) -> Dict[str, Optional[Union[Dict[str, DataFra
     
     if are_files_continuous(file_names=file_names):
         for file_name in file_names:
-            file_path = os.path.join(directory, file_name)
             print(f"Processing file: {file_name}")
+            file_path = os.path.join(directory, file_name)
             data_frame: DataFrame = load_file_to_dataframe(file_path)
             if data_frame is not None:
                 statements[file_name] = data_frame
