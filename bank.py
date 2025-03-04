@@ -48,8 +48,11 @@ import os
 import re
 
 from bs4 import BeautifulSoup
+from decimal import Decimal, getcontext
 from pandas import concat, DataFrame, read_csv, read_excel, Series, to_datetime, Timestamp
 from typing import Dict, List, Optional, Tuple, Union
+
+getcontext().prec = 12
 
 def are_files_continuous(file_names: List[str]) -> bool:
 
@@ -116,7 +119,7 @@ def consolidate_statements(bank_statements: Dict[str, DataFrame]) -> DataFrame:
 
     return (concat(bank_statements.values(), ignore_index=True)
             .sort_values(by=["date", "credit"], ascending=[True, False])
-            .assign(balance=lambda x: (x['credit'] + x['debit']).cumsum())
+            .assign(balance=lambda x: (x['credit'].apply(Decimal) + x['debit'].apply(Decimal)).cumsum())
             .reindex(columns=["date", "description", "credit", "debit", "balance", "bank", "account_holder"]))
 
 
@@ -251,14 +254,17 @@ def enrich_merged_statement(bank_statements: Dict[str, DataFrame]) -> Dict[str, 
 
         opening_transaction: Series = statement.iloc[0].copy()
         opening_transaction["description"] = "Balance brought forward"
+        opening_transaction["credit"] = Decimal(opening_transaction["credit"])
+        opening_transaction["debit"] = Decimal(opening_transaction["debit"])
+        opening_transaction["balance"] = Decimal(opening_transaction["balance"])
         opening_transaction["balance"] += opening_transaction["debit"] - opening_transaction["credit"]
         if opening_transaction["balance"] >= 0:
-            opening_transaction["debit"], opening_transaction["credit"] = 0.0, opening_transaction["balance"]
+            opening_transaction["debit"], opening_transaction["credit"] = Decimal(0.0), opening_transaction["balance"]
         else:
-            opening_transaction["debit"], opening_transaction["credit"] = opening_transaction["balance"], 0.0
+            opening_transaction["debit"], opening_transaction["credit"] = opening_transaction["balance"], Decimal(0.0)
 
         statement = (concat([DataFrame([opening_transaction]), statement], ignore_index=True)
-                     .assign(debit=lambda x: (- x["debit"]),
+                     .assign(debit=lambda x: (- x["debit"]).apply(Decimal),
                              date=lambda x: to_datetime(x['date'], format='mixed').dt.strftime('%Y-%m-%d'))
                      .drop(columns=["balance"])
                      .rename(columns={"account holder": "account_holder"})
@@ -308,7 +314,7 @@ def enrich_statements(statements: Dict[str, DataFrame],
 
     """
     Processes and enriches a dictionary of bank statement DataFrames by applying specific enrichment functions based on
-    the bank name (Canara Bank, ICICI Bank, or State Bank of India). It also adds the account holder's name and the bank
+    the bank name (Bank of Maharashtra, Canara Bank, ICICI Bank, or State Bank of India). It also adds the account holder's name and the bank
     name to each statement.
 
     args:
