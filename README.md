@@ -4,3 +4,6 @@ The repository offers a collection of utilities designed to assist in managing a
 
 ## **1. Bank Statement Utilities**:  
   Merges bank statements from multiple individuals and accounts into a single, unified pandas DataFrame.
+
+## **2. Yahoo Finance**:
+  A wrapper for Yahoo Finance APIs.
