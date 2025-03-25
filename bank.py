@@ -1,25 +1,32 @@
 """
-The module consolidates bank account statements into a unified format, presenting transactions in chronological order
-to facilitate analytical data processing.
+The module offer tools to present bank statements from various accounts and individuals in a unified format, displaying
+transactions in chronological order to facilitate analytical data processing.
 
-1. The files of bank account statement must be named using the naming convention:
+1. The files of bank account statement must be named using one of the naming conventions:
 
-    <initials_of_account_holder>_<initials_of_bank>_<financial_year>.<extention>
+    1.1. <initials_of_account_holder>_<initials_of_bank>_<financial_year>.<extention>
+    1.2. <initials_of_account_holder>_<initials_of_bank>_<financial_year_start><financial_year_end>.<extention>
 
-    Examples:
+        Examples:
+            1.1.  TS_BB_2024.xls
+                    TS = Tony Stark
+                    BB = Bank of Baroda
+                    2024 = 2024-2025
 
-    1.1.  TS_BB_2024.xls
-            TS = Tony Stark
-            BB = Bank of Baroda
-            2024 = 2024-2025
+            1.2.  CJP_HDFC_2020.csv
+                    CJP = Captain Jack Sparrow
+                    HDFC = Housing Development Finance Corporation Bank
+                    2020 = 2020-2021
 
-    1.2.  CJP_HDFC_2020.csv
-            CJP = Captain Jack Sparrow
-            HDFC = Housing Development Finance Corporation Bank
-            2020 = 2020-2021
+            1.3. JM_IDFC_2011_2013.htm
+                    JM = Jerry Maguire
+                    IDFC = Infrastructure Development Finance Company Bank
+                    2011_2013 = 2011-2012, 2012-2013, 2013-2014
+
 
 2. List of banks supported by the utility:
 
+    BOM: Bank of Maharashtra
     CB: Canara Bank
     ICICI: ICICI Bank
     SBI: State Bank of India
@@ -40,7 +47,8 @@ to facilitate analytical data processing.
 import os
 import re
 
-from pandas import concat, DataFrame, read_csv, read_excel, Series, to_datetime
+from bs4 import BeautifulSoup
+from pandas import concat, DataFrame, read_csv, read_excel, Series, to_datetime, Timestamp
 from typing import Dict, List, Optional, Tuple, Union
 
 def are_files_continuous(file_names: List[str]) -> bool:
@@ -95,8 +103,8 @@ def consolidate_statements(bank_statements: Dict[str, DataFrame]) -> DataFrame:
 
     args:
         bank_statements (Dict[str, DataFrame]): A dictionary where the keys are bank identifiers and the values 
-                                                are DataFrames containing bank transactions with columns like 
-                                                "date", "description", "credit", "debit" and "balance".
+                                                are DataFrames containing bank transactions with columns 
+                                                `date`, `description`, `credit`, `debit` and `balance`.
 
     returns:
         DataFrame: A consolidated DataFrame with recalculated balances and sorted by date and credit in ascending and
@@ -110,20 +118,57 @@ def consolidate_statements(bank_statements: Dict[str, DataFrame]) -> DataFrame:
             .sort_values(by=["date", "credit"], ascending=[True, False])
             .assign(balance=lambda x: (x['credit'] + x['debit']).cumsum())
             .reindex(columns=["date", "description", "credit", "debit", "balance", "bank", "account_holder"]))
-    
-def enrich_cb_statement(statement: DataFrame) -> DataFrame:
+
+
+def enrich_bom_statement(statement: DataFrame) -> DataFrame:
 
     """
-    Cleans and enriches a Canara bank statement DataFrame by renaming columns, formatting dates and converting debit,
+    Cleans and enriches a Bank of Maharashtra statement DataFrame by renaming columns, formatting dates and converting debit,
     credit and balance columns to numeric values. It also removes unnecessary columns and fills any missing values with
     0.0.
 
     args:
-        statement (DataFrame): A DataFrame containing raw Canara bank statement data.
+        statement (DataFrame): A DataFrame containing raw Bank of Maharashtra statement data.
 
     returns:
         DataFrame: A cleaned and enriched DataFrame with renamed columns ("date", "description", "debit", "credit", 
                   "balance") and numeric values for debit, credit and balance.
+
+    raises:
+        None
+    """
+
+    return (statement.iloc[1:-1]
+            .rename(columns=lambda x: x.strip())
+            .map(lambda x: x.strip())
+            .drop(columns=["Cheque No"])
+            .rename(columns={"Date": "date", 
+                             "Particulars": "description", 
+                             "Withdrawals": "debit", 
+                             "Deposits": "credit", 
+                             "Balance": "balance"})
+            .assign(date=lambda x: to_datetime(x["date"], format="%d/%m/%y"),
+                    debit=lambda x: x["debit"].astype(str).str.replace(r"[^0-9.]", "", regex=True)
+                    .replace("", 0.0).astype(float),
+                    credit=lambda x: x["credit"].astype(str).str.replace(r"[^0-9.]", "", regex=True)
+                    .replace("", 0.0).astype(float), 
+                    balance=lambda x: x["balance"].astype(str).str.replace(r"[^0-9.]", "", regex=True)
+                    .replace("", 0.0).astype(float))
+            .fillna(0.0))
+    
+def enrich_cb_statement(statement: DataFrame) -> DataFrame:
+
+    """
+    Cleans and enriches a Canara Bank statement DataFrame by renaming columns, formatting dates and converting debit,
+    credit and balance columns to numeric values. It also removes unnecessary columns and fills any missing values with
+    0.0.
+
+    args:
+        statement (DataFrame): A DataFrame containing raw Canara Bank statement data.
+
+    returns:
+        DataFrame: A cleaned and enriched DataFrame with renamed columns (`date`, `description`, `debit`, `credit`, 
+                  `balance`) and numeric values for debit, credit and balance.
 
     raises:
         None
@@ -138,27 +183,27 @@ def enrich_cb_statement(statement: DataFrame) -> DataFrame:
             .assign(date=lambda x: to_datetime(x["date"]
                                                .str.extract(r"(\d{2}-\d{2}-\d{4})")[0], 
                                                format="%d-%m-%Y"),
+                    debit=lambda x: x["debit"].astype(str).str.replace(r"[^0-9.]", "", regex=True)
+                    .replace("", 0.0).astype(float),
                     credit=lambda x: x["credit"].astype(str).str.replace(r"[^0-9.]", "", regex=True)
                     .replace("", 0.0).astype(float), 
                     balance=lambda x: x["balance"].astype(str).str.replace(r"[^0-9.]", "", regex=True)
-                    .replace("", 0.0).astype(float), 
-                    debit=lambda x: x["debit"].astype(str).str.replace(r"[^0-9.]", "", regex=True)
                     .replace("", 0.0).astype(float))
             .fillna(0.0))
 
 def enrich_icici_statement(statement: DataFrame) -> DataFrame:
 
     """
-    Processes an ICICI bank statement DataFrame by renaming columns, formatting dates and converting debit, credit and
+    Processes an ICICI Bank statement DataFrame by renaming columns, formatting dates and converting debit, credit and
     balance columns to numeric values. It removes unnecessary columns and rows, adjusts the index and fills missing
     numeric values with 0.0.
 
     args:
-        statement (DataFrame): A DataFrame containing raw ICICI bank statement data.
+        statement (DataFrame): A DataFrame containing raw ICICI Bank statement data.
 
     returns:
-        DataFrame: A cleaned and enriched DataFrame with renamed columns ("date", "description", "debit", "credit", 
-                  "balance") and numeric values for debit, credit and balance.
+        DataFrame: A cleaned and enriched DataFrame with renamed columns (`date`, `description`, `debit`, `credit`, 
+                  `balance`) and numeric values for debit, credit and balance.
 
     raises:
         None
@@ -189,8 +234,8 @@ def enrich_merged_statement(bank_statements: Dict[str, DataFrame]) -> Dict[str, 
 
     args:
         bank_statements (Dict[str, DataFrame]): A dictionary where the keys are bank identifiers and the values
-                                                are DataFrames containing bank transactions with columns like
-                                                "date", "description", "credit", "debit", and "balance".
+                                                are DataFrames containing bank transactions with columns
+                                                `date`, `description`, `credit`, `debit` and `balance`.
 
     returns:
         Dict[str, DataFrame]: A dictionary with the same keys, but with the enriched DataFrames, with the "balance"
@@ -232,8 +277,8 @@ def enrich_sbi_statement(statement: DataFrame) -> DataFrame:
         statement (DataFrame): A DataFrame containing raw State Bank of India bank statement data.
 
     returns:
-        DataFrame: A cleaned and enriched DataFrame with renamed columns ("date", "description", "debit", "credit", 
-                  "balance"), numeric values for debit, credit and balance and formatted date values.
+        DataFrame: A cleaned and enriched DataFrame with renamed columns (`date`, `description`, `debit`, `credit`, 
+                  `balance`), numeric values for debit, credit and balance and formatted date values.
 
     raises:
         None
@@ -269,7 +314,7 @@ def enrich_statements(statements: Dict[str, DataFrame],
         statements (Dict[str, DataFrame]): A dictionary where the keys are file names and the values are DataFrames
                                            representing bank statements for different banks.
         account_holders (Dict[str, str]): A dictionary mapping account holder identifiers to their names to associate
-        transactions in the consolidated statement to respective account holder.
+                                          transactions in the consolidated statement to respective account holder.
             Examples:
                 1. account_holders = {
                                     "TS": "Tony Stark",
@@ -290,7 +335,9 @@ def enrich_statements(statements: Dict[str, DataFrame],
         account_holder, bank_name, financial_year, extension = get_file_info(file_name)
         statement = statements.get(file_name)
         
-        if bank_name == "CB":
+        if bank_name == "BOM":
+            statement["bank"] = "Bank of Maharashtra"
+        elif bank_name == "CB":
             statement = enrich_cb_statement(statement=statement)
             statement["bank"] = "Canara Bank"
         elif bank_name == "ICICI":
@@ -330,49 +377,58 @@ def find_data_start(file_path: str, delimiter: str, min_columns: int) -> int:
             if len(line.strip().split(delimiter)) >= min_columns:
                 return start_line
     raise ValueError("Unable to determine where tabular data starts in the file.")
-    
-def get_file_info(file_name: str) -> Tuple[str, str, str, str]:
+
+def get_file_info(file_name: str) -> Union[Tuple[str, str, str, str], Tuple[str, str, str, str, str]]:
 
     """
-    Extracts account holder information, bank name, financial year and file extension from a file name using a
+    Extracts account holder information, bank name, financial year(s) and file extension from a file name using a
     predefined pattern.
 
     args:
-        file_name (str): The file name in the format "account_holder_bank_name_financial_year.extension".
+        file_name (str): The file name in one of the following formats:
+                         1. "account_holder_bank_name_financial_year.extension"
+                         2. "account_holder_bank_name_financial_year_start_financial_year_end.extension"
 
     returns:
-        Tuple[str, str, str, str]: A tuple containing the extracted values: account holder, bank name, 
-                                   financial year and file extension.
+        Union[Tuple[str, str, str, str], Tuple[str, str, str, str, str]]: A tuple containing the extracted values:
+                                                                          - For format 1: account holder, bank name,
+                                                                            financial year and file extension.
+                                                                          - For format 2: account holder, bank name,
+                                                                            financial year start, financial year end
+                                                                            and file extension.
 
     raises:
-        AttributeError: If the file name does not match the expected pattern.
+        AttributeError: If the file name does not match either of the expected patterns.
     """
 
-    account_holder, bank_name, financial_year, extension = re.match(r"([^_]+)_([^_]+)_([^_]+)\.(\w+)", 
-                                                                    file_name).groups()
-    return account_holder, bank_name, financial_year, extension
+    patterns = [
+        r"([^_]+)_([^_]+)_([^_]+)\.(\w+)",
+        r"([^_]+)_([^_]+)_([^_]+)_([^_]+)\.(\w+)"
+    ]
 
-def get_consolidated_statement(directory: str, account_holders: Dict[str, str]) -> DataFrame:
+    for pattern in patterns:
+        match = re.match(pattern, file_name)
+        if match:
+            return match.groups()
+    
+    raise AttributeError("The file name does not match either of the expected patterns.")
+
+def get_financial_year(date: Timestamp) -> str:
 
     """
-    Retrieves and consolidates bank account statements from the specified directory. The function loads all statement
-    files from the directory, enriches the statements and adds account holder information, merges them and consolidates
-    the data into a unified pandas DataFrame.
+    Determines the financial year for a given date.
 
     args:
-        directory (str): The path to the directory containing the bank account statement files.
-        account_holders (Dict[str, str]): A dictionary mapping account numbers to account holder names for enrichment.
+        date (Timestamp): The date for which to determine the financial year.
 
     returns:
-        DataFrame: A consolidated pandas DataFrame containing all the bank account statements.
-
-    raises:
-        None
+        str: The financial year in the format "YYYY-YYYY".
     """
 
-    return consolidate_statements(enrich_merged_statement(merge_statements(enrich_statements(load_all_files(directory),
-                                                                                             account_holders))))
-    
+    start_year = date.year if date.month >= 4 else date.year - 1
+    end_year = start_year + 1
+    return f"{start_year}-{end_year}"
+
 def load_all_files(directory: str) -> Dict[str, Optional[Union[Dict[str, DataFrame], DataFrame]]]:
 
     """
@@ -434,7 +490,7 @@ def load_file_to_dataframe(file_path: str) -> Optional[Union[Dict[str, DataFrame
 
     try:
         try:
-            return read_as_excel(file_path)
+            return read_as_excel_file(file_path)
         except Exception as e:
             print(f"Error reading {file_path} as an Excel file: {e}")
         return read_as_text_file(file_path)
@@ -475,12 +531,12 @@ def merge_statements(statements: Dict[str, DataFrame]) -> Dict[str, DataFrame]:
         
     return bank_accounts
 
-def read_as_excel(file_path: str) -> Union[Dict[str, DataFrame], DataFrame]:
+def read_as_excel_file(file_path: str) -> Union[Dict[str, DataFrame], DataFrame]:
 
     """
     Attempts to read an Excel file using various engines. It tries to load the file with each engine in a specified
     order and returns the data as a dictionary of DataFrames (one for each sheet) or a single DataFrame if the file
-    contains only one sheet. If all attempts fail, it raises a "ValueError".
+    contains only one sheet. If all attempts fail, it raises a `ValueError`.
 
     args:
         file_path (str): The path to the Excel file to be read.
@@ -502,7 +558,47 @@ def read_as_excel(file_path: str) -> Union[Dict[str, DataFrame], DataFrame]:
             print(f"Failed to load {file_path} with engine {engine}: {e}")    
     raise ValueError(f"Unable to read {file_path} as an Excel file.")
 
-def read_as_text_file(file_path: str) -> Union[Dict[str, DataFrame], DataFrame]:
+def read_as_html_file(file_path: str, min_columns: int) -> DataFrame:
+
+    """
+    Reads an HTML file to determine where tabular data starts by checking if the table contains at least a minimum number
+    of columns. Returns the table data as a pandas DataFrame.
+
+    args:
+        file_path (str): The path to the HTML file to be analyzed.
+        min_columns (int): The minimum number of columns that the table must contain to be considered the start of the 
+                            tabular data.
+
+    returns:
+        DataFrame: A DataFrame containing the table data.
+
+    raises:
+        ValueError: If no table in the file contains the minimum number of columns.
+    """
+
+    soup = BeautifulSoup(open(file_path), 'html.parser')
+
+    for table in soup.find_all("table"):
+        header_row = table.find("tr")
+        header_cells = header_row.find_all(['th', 'td'])
+
+        if len(header_cells) >= min_columns:
+            list_header = [cell.get_text() for cell in header_cells]
+            data = []
+            for row in table.find_all("tr")[1:]:
+                sub_data = []
+                for cell in row.find_all(['td', 'th']):
+                    try:
+                        sub_data.append(cell.get_text())
+                    except:
+                        continue
+                data.append(sub_data)
+
+            return DataFrame(data=data, columns=list_header)
+
+    raise ValueError("No table contains the minimum number of columns.")
+
+def read_as_text_file(file_path: str) -> DataFrame:
 
     """
     Attempts to read a text file as either a TSV (tab-separated values) or CSV (comma-separated values) file. It first
@@ -513,8 +609,7 @@ def read_as_text_file(file_path: str) -> Union[Dict[str, DataFrame], DataFrame]:
         file_path (str): The path to the text file to be read.
 
     returns:
-        Union[Dict[str, DataFrame], DataFrame]: A DataFrame with the content of the file. The function assumes the file
-                                                may contain multiple tables or a single table.
+        DataFrame: A DataFrame with the content of the file.
 
     raises:
         None
@@ -524,10 +619,61 @@ def read_as_text_file(file_path: str) -> Union[Dict[str, DataFrame], DataFrame]:
         start_line: int = find_data_start(file_path, delimiter="\t", min_columns=5)
         return read_csv(file_path, delimiter="\t", engine="python", skiprows=start_line)
     except Exception as e:
-        print(f"Failed to read {file_path} as a tsv file: {e}")
+        print(f"Failed to read {file_path} as a TSV file: {e}")
 
     try:
         start_line: int = find_data_start(file_path, delimiter=",", min_columns=5)
         return read_csv(file_path, delimiter=",", engine="python", skiprows=start_line)
     except Exception as e:
-        print(f"Failed to read {file_path} as a csv file: {e}")
+        print(f"Failed to read {file_path} as a CSV file: {e}")
+
+def save_segregated_statements(statements: Dict[str, DataFrame], initials_of_account_holder: str, initials_of_bank: str, 
+                               directory: str) -> None:
+    
+    """
+    Saves segregated financial statements each associated with a specific financial year and saves them as CSV files.
+    The filenames are constructed using the initials of the account holder, the initials of the bank and the financial year.
+
+    args:
+        statements (Dict[str, DataFrame]): A dictionary where the keys are strings representing financial years
+                                       (e.g., '2022-2023') and the values are pandas DataFrames containing
+                                       the financial statements for those years.
+        initials_of_account_holder (str): The initials of the account holder to be included in the filename.
+        initials_of_bank (str): The initials of the bank to be included in the filename.
+        directory (str): The directory path where the CSV files will be saved. If the directory does not exist,
+                        it will be created.
+
+    returns:
+        None
+    """
+
+    os.makedirs(directory, exist_ok=True)
+
+    for financial_years, statement in statements.items():
+        financial_year = financial_years.split('-')[0]
+        file_name = f"{initials_of_account_holder}_{initials_of_bank}_{financial_year}.csv"
+        file_path = os.path.join(directory, file_name)
+        statement.drop(columns=['financial_year']).to_csv(file_path, index=False)
+
+
+def segregate_statement(bank_statement: DataFrame) -> Dict[str, DataFrame]:
+
+    """
+    Segregate bank statement DataFrame into multiple DataFrames based on financial years.
+
+    args:
+        bank_statement (DataFrame): The input DataFrame containing a `date` column.
+    
+    returns:
+        dict: A dictionary where keys are financial years and values are corresponding DataFrames.
+    """
+
+    return {
+        year: group
+        for year, group in (
+            bank_statement
+            .assign(date=to_datetime(bank_statement["date"], format="%Y-%m-%d"))
+            .assign(financial_year=lambda x: x["date"].apply(get_financial_year))
+            .groupby("financial_year")
+        )
+    }

@@ -9,6 +9,7 @@ The `bank` module provides essential functions for handling bank account stateme
 - Merging bank statements from multiple individuals and accounts into a single, unified pandas DataFrame for easier analysis and reporting.  
 
 - **Supported Banks**:  
+  - Bank of Maharashtra  
   - Canara Bank  
   - ICICI Bank  
   - State Bank of India  
