@@ -6,7 +6,7 @@ def read_requirements():
 
 setup(
     name="finance",
-    version="0.5.1", 
+    version="0.6.1", 
     packages=find_packages(),
     install_requires=read_requirements(),
     author="ninja-con-gafas",

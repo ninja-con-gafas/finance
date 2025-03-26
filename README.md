@@ -21,9 +21,11 @@ The `securities` module provides utilities for retrieving and processing financi
 - **Fetching Historical Data**: Retrieves historical stock price data from Yahoo Finance using its internal API.  
   - Supports various **frequencies** (`1d`, `5d`, `1wk`, `1mo`, `3mo`).  
   - Allows selection of different **quote types** (`open`, `close`, `high`, `low`, `adjclose`).  
-  - Includes **debug logging** for debugging API calls.  
 
-- **Fetching Corporate Events**: Retrieves corporate events (dividends and stock splits) from Yahoo Finance using its internal API.  
-  - Supports filtering by **event type** (`dividends`, `splits`) or fetching all events.  
+- **Fetching Corporate Events**: Retrieves corporate events (bonuses, dividends and stock splits) from BSE India using its internal API.  
+  - Supports filtering by **event type** (`bonus`, `dividend`, `split`) or fetching all events.  
   - Allows specifying a **date range** (`start_date`, `end_date`).  
-  - Includes **debug logging** for debugging API calls.  
+
+- **Fetching BSE Script Code**: Retrieves BSE Script Code from BSE India using its internal API.  
+  - Supports filtering by **segment** (`Equity T+1`, `Equity T+0`, `Derivatives`, `Exchange Traded Funds`, `Debt or Others`, `Currency Derivatives`, `Commodity`, `Electronic Gold Receipts`, `Hybrid Security`, `Municipal Bonds`, `Preference Shares`, `Debentures and Bonds`, `Equity - Institutional Series`, `Commercial Papers`, `Social Stock Exchange`).
+  - Supports filtering by **status** (`Active`, `Suspended`, `Delisted`) or fetching all.
