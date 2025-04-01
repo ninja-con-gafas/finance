@@ -2,11 +2,57 @@ import logging
 import re
 import requests
 from datetime import datetime, timezone
+from requests import Response
+from time import sleep
 from typing import Any, List, Dict, Optional
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+def _requests_get(url: str, params: Dict[str, str] = {}, headers: Dict[str, str] = {}, max_retries: int = 5, timeout: int = 30) -> Response:
+
+    """
+    Makes an HTTP GET request with retries.
+
+    Parameters:
+        url (str): The request URL.
+        params (Optional[Dict[str, str]]): Query parameters (default: {}).
+        headers (Optional[Dict[str, str]]): HTTP headers (default: {}).
+        max_retries (int): Maximum number of retries on failure (default: 5).
+        timeout (int): Request timeout in seconds (default: 30 s).
+
+    Returns:
+        Response: The response object, even after retrying, if the request is successful or failed after all retries.
+    """
+
+    retries = 0
+
+    while retries < max_retries:
+        try:
+            response = requests.get(url, params=params, headers=headers, timeout=timeout)
+            # Raise HTTPError for bad responses (4xx, 5xx)
+            response.raise_for_status()
+            return response
+        except requests.exceptions.Timeout:
+            logger.info(f"Request timed out (attempt {retries + 1}/{max_retries}). Retrying")
+        except requests.exceptions.HTTPError as e:
+            logger.info(f"HTTP error {response.status_code}: {e}")
+            # Don't retry on client errors
+            if response.status_code in {400, 401, 403, 404}:
+                return response 
+        except requests.exceptions.RequestException as e:
+            logger.info(f"Request failed: {e} (attempt {retries + 1}/{max_retries}). Retrying")
+
+        retries += 1
+        # Exponential backoff
+        wait_time = 5 ** retries
+        logger.info(f"Retrying in {wait_time} seconds")
+        # Wait before retrying
+        sleep(wait_time)
+
+    logger.info("Max retries reached. Returning response object.")
+    return response
 
 def get_corporate_events(scriptcode: str, start_date: str, end_date: str, event_type: str = None, debug: bool = False) -> List[Dict[str, Any]]:
 
@@ -65,7 +111,7 @@ def get_corporate_events(scriptcode: str, start_date: str, end_date: str, event_
 
     # Make the request
     try:
-        response = requests.get(url, headers=headers)
+        response = _requests_get(url, headers=headers)
         response.raise_for_status()
     except requests.RequestException as e:
         logger.error(f"Request error: {e}")
@@ -181,7 +227,7 @@ def get_historical_data(ticker: str, start_date: str, end_date: str, frequency: 
 
     # Make the request
     try:
-        response = requests.get(url, headers=headers)
+        response = _requests_get(url, headers=headers)
         response.raise_for_status()
     except requests.RequestException as e:
         logger.error(f"Request error: {e}")
@@ -304,7 +350,7 @@ def get_script_codes(tickers: List[str], segment: str = "Equity T+1", status: st
 
     # Fetch data
     try:
-        response = requests.get(url, params=params, headers=headers)
+        response = _requests_get(url, params=params, headers=headers)
         response.raise_for_status()
         securities = response.json()
     except requests.RequestException as e:
