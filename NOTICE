@@ -1,0 +1,19 @@
+finance - Copyright 2025 Atharv Darekar
+
+This product includes software developed by Atharv Darekar.
+
+This product includes components licensed under the Apache License, Version 2.0:
+- Requests - https://docs.python-requests.org/
+
+This product includes components licensed under the BSD 3-Clause License:
+- pandas - https://pandas.pydata.org/
+- xlrd - https://github.com/python-excel/xlrd
+
+This product also uses components licensed under the MIT License:
+- openpyxl - https://openpyxl.readthedocs.io/
+- pyxlsb - https://github.com/wwwiiilll/pyxlsb
+
+Unless otherwise noted, all third-party libraries are used in accordance with their respective licenses.
+The full text of the Apache License 2.0 is available in the LICENSE file and online at:
+
+https://www.apache.org/licenses/LICENSE-2.0
